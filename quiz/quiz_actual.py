@@ -98,21 +98,40 @@ def to_destroy():
 # After taking that info, it gets the image and converts it into python readable formant using the PIL library's ImageTk module.
 # TODO: Remove this l8r. I finally got it to work inside a function, after spending 4 hours figuring out stuff, lets gooooo. 
 
-def get_image(url="http://www.iconhot.com/icon/png/bunch-cool-bluish-icons/128/info-user.png",r=1,c=0, frame=details_frame,height=128,width=128,lbl=False):
+def get_image(url="http://www.iconhot.com/icon/png/bunch-cool-bluish-icons/128/info-user.png", r=1, c=0, frame=details_frame, height=128, width=128, lbl=False):
     if lbl == True:
         global title
-        title = Label(frame, text="Gaurav's Astronomy QUIZ", 
-        width=50, bg="green",fg="white", font=("ariel", 20, "bold")).grid(row=0,column=0) 
-    global response
-    response = requests.get(f"{url}")
-    global img
-    im = Image.open(BytesIO(response.content))
-    im = im.resize((width,height),Image.ANTIALIAS)
-    img = ImageTk.PhotoImage(im)
-    # print(img.height(),img.width())
-    global img_label
-    img_label = Label(frame,image=img)
-    img_label.grid(row=r,column=c)
+        title = Label(
+            frame,
+            text="Gaurav's Astronomy QUIZ",
+            width=50,
+            bg="green",
+            fg="white",
+            font=("ariel", 20, "bold"),
+        )
+        title.grid(row=0, column=0)
+
+    try:
+        # Add timeout and handle HTTP errors/redirect loops gracefully
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        im = Image.open(BytesIO(response.content))
+        im = im.resize((width, height), Image.ANTIALIAS)
+        img_local = ImageTk.PhotoImage(im)
+
+        # Keep reference to avoid garbage collection
+        img_label_local = Label(frame, image=img_local)
+        img_label_local.image = img_local
+        img_label_local.grid(row=r, column=c)
+
+        # Maintain original globals for any downstream reliance
+        global img, img_label
+        img = img_local
+        img_label = img_label_local
+    except Exception:
+        # Fallback: don't crash the app if an image can't be loaded
+        fallback = Label(frame, text="Image unavailable", width=20, bg="#eee", fg="#333")
+        fallback.grid(row=r, column=c)
 
 # Calling the function get_image() with a link to a user info photo, to add the user photo to master1.
 get_image("http://www.iconhot.com/icon/png/bunch-cool-bluish-icons/128/info-user.png",r=3,c=3)
@@ -164,7 +183,7 @@ I____    I   \I     I____/
 
 
 # Opening the JSON file that Contains the Questions, Answers, and Options.
-file = json.load(open("questions.json"))
+file = json.load(open("questions.json", encoding="utf-8"))
 
 # Converting the questions, options and answers to a list format. 
 questions = (file["questions"])
@@ -214,7 +233,12 @@ option_variables = [option1,option2,option3,option4]
 # I.e. the user pressed DONE, adds and grids a start button which starts the quiz.
 def exit():
     if exited == True:
-        details_frame.destroy()
+        # Avoid errors if the frame/application was already destroyed
+        try:
+            if details_frame.winfo_exists():
+                details_frame.destroy()
+        except Exception:
+            pass
         global questions_frame
         questions_frame = Frame(master1)
         questions_frame.grid()
